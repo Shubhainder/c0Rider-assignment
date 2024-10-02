@@ -14,7 +14,7 @@ import {
   PopoverCloseButton,
   PopoverBody,
 } from "@chakra-ui/react";
-import { fetchChatMessages } from "../api/ChatApi";
+// import { fetchChatMessages } from "../api/ChatApi";
 import { ChatState, Message } from "../types/chat";
 import { formatMessageDate } from "../utils/dateUtils";
 
@@ -40,6 +40,12 @@ const ChatScreen: React.FC = () => {
       lastMessageRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, []);
+  const fetchChatMessages = async (page: number) => {
+    const response = await fetch(`https://qa.corider.in/assignment/chat?page=${page}`)
+    const data = await response.json()
+    console.log(data)
+    return data
+  }
 
   const loadMessages = useCallback(async () => {
     if (chatState.isLoading || !shouldObserve) return;

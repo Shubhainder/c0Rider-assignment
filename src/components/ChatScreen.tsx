@@ -192,8 +192,8 @@ const ChatScreen: React.FC = () => {
 
           <Popover placement="top">
             <PopoverTrigger>
-              <Button>
-                {" "}
+              <Button bg="white">
+                
                 <Image src="/paperclip.png" boxSize={5} />
               </Button>
             </PopoverTrigger>

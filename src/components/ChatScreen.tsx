@@ -7,13 +7,12 @@ import {
   Flex,
   Image,
   Divider,
-  Heading,
-  Highlight,
+  
   Popover,
   PopoverTrigger,
   Button,
   PopoverContent,
-  PopoverArrow,
+   
   PopoverCloseButton,
   PopoverBody,
 } from "@chakra-ui/react";

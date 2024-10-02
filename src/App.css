@@ -1,0 +1,8 @@
+body{
+    justify-content: center;
+    height: 100dvh;
+    background-color: rgb(26, 26, 26);
+}
+span{
+    font-weight: 600;
+}

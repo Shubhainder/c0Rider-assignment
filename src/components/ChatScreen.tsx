@@ -7,12 +7,10 @@ import {
   Flex,
   Image,
   Divider,
-  
   Popover,
   PopoverTrigger,
   Button,
   PopoverContent,
-   
   PopoverCloseButton,
   PopoverBody,
 } from "@chakra-ui/react";
@@ -32,20 +30,42 @@ const initialChatState: ChatState = {
 
 const ChatScreen: React.FC = () => {
   const [chatState, setChatState] = useState<ChatState>(initialChatState);
-  const initialized = useRef(false);
+  const observerTarget = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const lastMessageRef = useRef<HTMLDivElement>(null);
+  const [shouldObserve, setShouldObserve] = useState(true);
+
+  const scrollToLastMessage = useCallback(() => {
+    if (lastMessageRef.current) {
+      lastMessageRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
 
   const loadMessages = useCallback(async () => {
+    if (chatState.isLoading || !shouldObserve) return;
+
+    setChatState((prev) => ({ ...prev, isLoading: true }));
+    setShouldObserve(false); // Disable observation while loading
+
     try {
       const data = await fetchChatMessages(chatState.currentPage);
+      if (data.chats.length === 0) {
+        setChatState((prev) => ({ ...prev, isLoading: false }));
+        return; // No more messages to load
+      }
+
       setChatState((prevState) => ({
         ...prevState,
-        from: data.from || prevState.from,
-        to: data.to || prevState.to,
-        name: data.name || prevState.name,
+        from: prevState.from || data.from,
+        to: prevState.to || data.to,
+        name: prevState.name || data.name,
         messages: [...prevState.messages, ...data.chats],
         currentPage: prevState.currentPage + 1,
         isLoading: false,
       }));
+
+      // Scroll to last message after loading new messages
+      setTimeout(scrollToLastMessage, 100);
     } catch (error) {
       setChatState((prevState) => ({
         ...prevState,
@@ -53,18 +73,54 @@ const ChatScreen: React.FC = () => {
         error: "Failed to load messages. Please try again.",
       }));
     }
-  }, [chatState.currentPage]);
+  }, [
+    chatState.isLoading,
+    chatState.currentPage,
+    shouldObserve,
+    scrollToLastMessage,
+  ]);
 
   useEffect(() => {
-    if (!initialized.current) {
-      initialized.current = true;
-      loadMessages();
-    }
-  }, [loadMessages]);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting && shouldObserve) {
+          loadMessages();
+        }
+      },
+      {
+        threshold: 1.0,
+      }
+    );
 
-  const renderMessage = (message: Message) => (
+    const currentObserverTarget = observerTarget.current;
+    if (currentObserverTarget) {
+      observer.observe(currentObserverTarget);
+    }
+
+    return () => {
+      if (currentObserverTarget) {
+        observer.unobserve(currentObserverTarget);
+      }
+    };
+  }, [loadMessages, shouldObserve]);
+
+  // Enable observation when user scrolls to top
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (container && container.scrollTop < 100) {
+      setShouldObserve(true);
+    }
+  }, []);
+
+  const renderMessage = (
+    message: Message,
+    index: number,
+    messages: Message[]
+  ) => (
     <Flex
       key={message.id}
+      ref={index === messages.length - 1 ? lastMessageRef : undefined}
       width={320}
       justify={message.sender.self ? "flex-end" : "flex-start"}
       mb={4}
@@ -99,10 +155,8 @@ const ChatScreen: React.FC = () => {
     </Flex>
   );
 
-  const groupMessagesByDate = (
-    messages: Message[]
-  ): Record<string, Message[]> => {
-    return messages.reduce(
+  const renderMessagesWithDateHeaders = () => {
+    const messagesByDate = chatState.messages.reduce(
       (acc: Record<string, Message[]>, message: Message) => {
         const dateKey = formatMessageDate(message.time);
         if (!acc[dateKey]) {
@@ -113,10 +167,6 @@ const ChatScreen: React.FC = () => {
       },
       {}
     );
-  };
-
-  const renderMessagesWithDateHeaders = () => {
-    const messagesByDate = groupMessagesByDate(chatState.messages);
 
     return Object.entries(messagesByDate).map(([date, messages]) => (
       <Box key={date} width="100%">
@@ -127,11 +177,15 @@ const ChatScreen: React.FC = () => {
           </Text>
           <Divider flex="1" borderColor="grey" />
         </Flex>
-        {messages.map(renderMessage)}
+        {messages.map((msg, idx) => renderMessage(msg, idx, messages))}
       </Box>
     ));
   };
 
+  // Initial load
+  useEffect(() => {
+    loadMessages();
+  }, []);
   return (
     <Box m={5} border="1px solid black" borderRadius="3xl" p={2} bg="#fbf9f3">
       <Box display="flex" alignItems="center" w="100%">
@@ -142,7 +196,6 @@ const ChatScreen: React.FC = () => {
         <Image src="/edit-05.png" justifyContent="end" width={6} height={6} />
       </Box>
       <Box bg="#fbf9f3" color="white" p={4} alignItems="center" display="flex">
-        {/* <Text fontSize="xl" color="black">{chatState.name}</Text>  */}
         <Image src="/Group 5.png" boxSize={12} />
         <Box flex={1} pl={4}>
           <Text fontSize="lg" color="black" display="flex">
@@ -159,10 +212,12 @@ const ChatScreen: React.FC = () => {
       <Divider flex="1" borderColor="grey" />
 
       <VStack
+        ref={messagesContainerRef}
         spacing={4}
         p={4}
         maxHeight="55vh"
         overflowY="auto"
+        onScroll={handleScroll}
         css={{
           "&::-webkit-scrollbar": {
             width: "4px",
@@ -176,8 +231,16 @@ const ChatScreen: React.FC = () => {
           },
         }}
       >
+        <div ref={observerTarget}>
+          {chatState.isLoading && (
+            <Text color="gray.500" textAlign="center">
+              Loading more messages...
+            </Text>
+          )}
+        </div>
         {renderMessagesWithDateHeaders()}
       </VStack>
+
       {chatState.error && <Text color="red.500">{chatState.error}</Text>}
       <Box mb={12}>
         <Box display="flex" bg="white" alignItems="center">
@@ -193,7 +256,6 @@ const ChatScreen: React.FC = () => {
           <Popover placement="top">
             <PopoverTrigger>
               <Button bg="white">
-                
                 <Image src="/paperclip.png" boxSize={5} />
               </Button>
             </PopoverTrigger>
@@ -204,7 +266,6 @@ const ChatScreen: React.FC = () => {
               width="fit-content"
               _focus={{ boxShadow: "none" }}
             >
-              {/* <PopoverArrow /> */}
               <PopoverCloseButton />
               <PopoverBody p={0}>
                 <Box position="relative">
@@ -215,7 +276,7 @@ const ChatScreen: React.FC = () => {
                     objectFit="cover"
                   />
                 </Box>
-              </PopoverBody>{" "}
+              </PopoverBody>
             </PopoverContent>
           </Popover>
           <Image src="/send-03.png" boxSize={5} />

@@ -13,8 +13,9 @@ import {
   PopoverContent,
   PopoverCloseButton,
   PopoverBody,
+  useBreakpointValue,
 } from "@chakra-ui/react";
-// import { fetchChatMessages } from "../api/ChatApi";
+import { fetchChatMessages } from "../api/ChatApi";
 import { ChatState, Message } from "../types/chat";
 import { formatMessageDate } from "../utils/dateUtils";
 
@@ -35,31 +36,33 @@ const ChatScreen: React.FC = () => {
   const lastMessageRef = useRef<HTMLDivElement>(null);
   const [shouldObserve, setShouldObserve] = useState(true);
 
+  // Responsive values
+  const containerWidth = useBreakpointValue({ base: "100%", md: "768px", lg: "100vw" });
+  const containerHeight = useBreakpointValue({ base: "100vh", md: "100vh" });
+  const messageWidth = useBreakpointValue({ base: "90%", md: "70%", lg: "100%" });
+  const containerMargin = useBreakpointValue({ base: 0, md: "auto" });
+  const mainPadding = useBreakpointValue({ base: 2, md: 4, lg: 6 });
+
   const scrollToLastMessage = useCallback(() => {
     if (lastMessageRef.current) {
-      lastMessageRef.current.scrollIntoView({ behavior: "smooth" });
+      lastMessageRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, []);
-  const fetchChatMessages = async (page: number) => {
-    const response = await fetch(`https://qa.corider.in/assignment/chat?page=${page}`)
-    const data = await response.json()
-    console.log(data)
-    return data
-  }
 
+  // Load messages logic remains the same
   const loadMessages = useCallback(async () => {
     if (chatState.isLoading || !shouldObserve) return;
 
-    setChatState((prev) => ({ ...prev, isLoading: true }));
-    setShouldObserve(false); // Disable observation while loading
+    setChatState(prev => ({ ...prev, isLoading: true }));
+    setShouldObserve(false);
 
     try {
       const data = await fetchChatMessages(chatState.currentPage);
       if (data.chats.length === 0) {
-        setChatState((prev) => ({ ...prev, isLoading: false }));
-        return; // No more messages to load
+        setChatState(prev => ({ ...prev, isLoading: false }));
+        return;
       }
-
+      
       setChatState((prevState) => ({
         ...prevState,
         from: prevState.from || data.from,
@@ -70,7 +73,6 @@ const ChatScreen: React.FC = () => {
         isLoading: false,
       }));
 
-      // Scroll to last message after loading new messages
       setTimeout(scrollToLastMessage, 100);
     } catch (error) {
       setChatState((prevState) => ({
@@ -79,24 +81,18 @@ const ChatScreen: React.FC = () => {
         error: "Failed to load messages. Please try again.",
       }));
     }
-  }, [
-    chatState.isLoading,
-    chatState.currentPage,
-    shouldObserve,
-    scrollToLastMessage,
-  ]);
+  }, [chatState.isLoading, chatState.currentPage, shouldObserve, scrollToLastMessage]);
 
+  // Observer effect remains the same
   useEffect(() => {
     const observer = new IntersectionObserver(
-      (entries) => {
+      entries => {
         const first = entries[0];
         if (first.isIntersecting && shouldObserve) {
           loadMessages();
         }
       },
-      {
-        threshold: 1.0,
-      }
+      { threshold: 1.0 }
     );
 
     const currentObserverTarget = observerTarget.current;
@@ -111,7 +107,6 @@ const ChatScreen: React.FC = () => {
     };
   }, [loadMessages, shouldObserve]);
 
-  // Enable observation when user scrolls to top
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
     if (container && container.scrollTop < 100) {
@@ -119,15 +114,11 @@ const ChatScreen: React.FC = () => {
     }
   }, []);
 
-  const renderMessage = (
-    message: Message,
-    index: number,
-    messages: Message[]
-  ) => (
+  const renderMessage = (message: Message, index: number, messages: Message[]) => (
     <Flex
       key={message.id}
       ref={index === messages.length - 1 ? lastMessageRef : undefined}
-      width={320}
+      width={messageWidth}
       justify={message.sender.self ? "flex-end" : "flex-start"}
       mb={4}
     >
@@ -151,10 +142,10 @@ const ChatScreen: React.FC = () => {
         p={2}
         maxWidth="80%"
       >
-        <Text width="100%" fontSize="sm">
+        <Text width="100%" fontSize={{ base: "sm", md: "md" }}>
           {message.message}
         </Text>
-        <Text fontSize="xs" textAlign="right">
+        <Text fontSize={{ base: "xs", md: "sm" }} textAlign="right">
           {message.time.slice(10, -3)}
         </Text>
       </Box>
@@ -162,23 +153,13 @@ const ChatScreen: React.FC = () => {
   );
 
   const renderMessagesWithDateHeaders = () => {
-    const messagesByDate = chatState.messages.reduce(
-      (acc: Record<string, Message[]>, message: Message) => {
-        const dateKey = formatMessageDate(message.time);
-        if (!acc[dateKey]) {
-          acc[dateKey] = [];
-        }
-        acc[dateKey].push(message);
-        return acc;
-      },
-      {}
-    );
+    const messagesByDate = groupMessagesByDate(chatState.messages);
 
     return Object.entries(messagesByDate).map(([date, messages]) => (
       <Box key={date} width="100%">
         <Flex align="center" justify="center" my={4}>
           <Divider flex="1" borderColor="grey" />
-          <Text mx={4} fontSize="sm" color="gray.500" fontWeight="medium">
+          <Text mx={4} fontSize={{ base: "xs", md: "sm" }} color="gray.500" fontWeight="medium">
             {date}
           </Text>
           <Divider flex="1" borderColor="grey" />
@@ -188,114 +169,136 @@ const ChatScreen: React.FC = () => {
     ));
   };
 
-  // Initial load
+  const groupMessagesByDate = (messages: Message[]): Record<string, Message[]> => {
+    return messages.reduce((acc: Record<string, Message[]>, message: Message) => {
+      const dateKey = formatMessageDate(message.time);
+      if (!acc[dateKey]) {
+        acc[dateKey] = [];
+      }
+      acc[dateKey].push(message);
+      return acc;
+    }, {});
+  };
+
   useEffect(() => {
     loadMessages();
   }, []);
+
   return (
-    <Box m={5} border="1px solid black" borderRadius="3xl" p={2} bg="#fbf9f3">
-      <Box display="flex" alignItems="center" w="100%">
-        <Image src="/Back.png" width={6} height={6} />
-        <Text fontSize="2xl" fontWeight="600" flex={1} m={2} color="black">
-          Trip 1
-        </Text>
-        <Image src="/edit-05.png" justifyContent="end" width={6} height={6} />
-      </Box>
-      <Box bg="#fbf9f3" color="white" p={4} alignItems="center" display="flex">
-        <Image src="/Group 5.png" boxSize={12} />
-        <Box flex={1} pl={4}>
-          <Text fontSize="lg" color="black" display="flex">
-            From &nbsp;
-            <span>{` ${chatState.from}`}</span>
-          </Text>
-          <Text fontSize="lg" color="black" display="flex">
-            To &nbsp;
-            <span>{` ${chatState.to}`}</span>
-          </Text>
-        </Box>
-        <Image src="/dots-vertical.png" width={6} height={6} />
-      </Box>
-      <Divider flex="1" borderColor="grey" />
-
-      <VStack
-        ref={messagesContainerRef}
-        spacing={4}
-        p={4}
-        maxHeight="55vh"
-        overflowY="auto"
-        onScroll={handleScroll}
-        css={{
-          "&::-webkit-scrollbar": {
-            width: "4px",
-          },
-          "&::-webkit-scrollbar-track": {
-            width: "6px",
-          },
-          "&::-webkit-scrollbar-thumb": {
-            background: "#718096",
-            borderRadius: "24px",
-          },
-        }}
+    <Box
+      height={containerHeight}
+      width="100vw"
+      display="flex"
+      justifyContent="center"
+      bg="#f5f5f5"
+    >
+      <Box
+        width={containerWidth}
+        height="100%"
+        m={containerMargin}
+        display="flex"
+        flexDirection="column"
+        bg="#fbf9f3"
+        borderRadius={{ base: 0, md: "3xl" }}
       >
-        <div ref={observerTarget}>
-          {chatState.isLoading && (
-            <Text color="gray.500" textAlign="center">
-              Loading more messages...
+        <Box p={mainPadding}>
+          <Flex alignItems="center" w="100%" mb={4}>
+            <Image src="/Back.png" width={6} height={6} cursor="pointer" />
+            <Text fontSize={{ base: "xl", md: "2xl" }} fontWeight="600" flex={1} mx={2} color="black">
+              Trip 1
             </Text>
-          )}
-        </div>
-        {renderMessagesWithDateHeaders()}
-      </VStack>
+            <Image src="/edit-05.png" width={6} height={6} cursor="pointer" />
+          </Flex>
+          
+          <Flex bg="#fbf9f3" color="white" alignItems="center" mb={4}>
+            <Image src="/Group 5.png" boxSize={{ base: 10, md: 12 }} />
+            <Box flex={1} pl={4}>
+              <Text fontSize={{ base: "md", md: "lg" }} color="black" display="flex">
+                From &nbsp;<span>{chatState.from}</span>
+              </Text>
+              <Text fontSize={{ base: "md", md: "lg" }} color="black" display="flex">
+                To &nbsp;<span>{chatState.to}</span>
+              </Text>
+            </Box>
+            <Image src="/dots-vertical.png" width={6} height={6} cursor="pointer" />
+          </Flex>
+        </Box>
 
-      {chatState.error && <Text color="red.500">{chatState.error}</Text>}
-      <Box mb={12}>
-        <Box display="flex" bg="white" alignItems="center">
-          <Input
-            placeholder="Reply to @Shubhainder"
-            _placeholder={{ color: "grey" }}
-            mt={2}
-            bg="white"
-            color="black"
-            border="black"
-          />
+        <Divider borderColor="grey" />
 
-          <Popover placement="top">
-            <PopoverTrigger>
-              <Button bg="white">
-                <Image src="/paperclip.png" boxSize={5} />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              bg="transparent"
-              border="none"
-              boxShadow="none"
-              width="fit-content"
-              _focus={{ boxShadow: "none" }}
-            >
-              <PopoverCloseButton />
-              <PopoverBody p={0}>
-                <Box position="relative">
+        <VStack
+          ref={messagesContainerRef}
+          flex={1}
+          p={mainPadding}
+          overflowY="auto"
+          onScroll={handleScroll}
+          spacing={4}
+          css={{
+            "&::-webkit-scrollbar": {
+              width: "4px",
+            },
+            "&::-webkit-scrollbar-track": {
+              width: "6px",
+            },
+            "&::-webkit-scrollbar-thumb": {
+              background: "#718096",
+              borderRadius: "24px",
+            },
+          }}
+        >
+          <div ref={observerTarget}>
+            {chatState.isLoading && (
+              <Text color="gray.500" textAlign="center">Loading more messages...</Text>
+            )}
+          </div>
+          {renderMessagesWithDateHeaders()}
+        </VStack>
+
+        {chatState.error && <Text color="red.500" p={mainPadding}>{chatState.error}</Text>}
+        
+        <Box p={mainPadding}>
+          <Box display="flex" bg="white" alignItems="center" borderRadius="md">
+            <Input
+              placeholder="Reply to @Shubhainder"
+              _placeholder={{ color: "grey" }}
+              bg="white"
+              color="black"
+              border="1px solid"
+              borderColor="gray.300"
+              borderRadius="md"
+            />
+            <Popover placement="top">
+              <PopoverTrigger>
+                <Button bg="white" _hover={{ bg: "gray.100" }}>
+                  <Image src="/paperclip.png" boxSize={5} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                bg="transparent"
+                border="none"
+                boxShadow="none"
+                width="fit-content"
+                _focus={{ boxShadow: "none" }}
+              >
+                <PopoverCloseButton />
+                <PopoverBody p={0}>
                   <Image
                     src="/Click.png"
-                    alt="Popover Image"
+                    alt="Attachment options"
                     borderRadius="md"
                     objectFit="cover"
                   />
-                </Box>
-              </PopoverBody>
-            </PopoverContent>
-          </Popover>
-          <Image src="/send-03.png" boxSize={5} />
+                </PopoverBody>
+              </PopoverContent>
+            </Popover>
+            <Button bg="white" _hover={{ bg: "gray.100" }}>
+              <Image src="/send-03.png" boxSize={5} />
+            </Button>
+          </Box>
         </Box>
+
+        
       </Box>
-      <Divider
-        w="8rem"
-        m="auto"
-        borderBottomWidth="3.5px"
-        borderColor="black"
-        borderRadius="xl"
-        opacity="1"
-      />
     </Box>
   );
 };
